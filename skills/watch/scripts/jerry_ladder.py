@@ -208,7 +208,8 @@ EYES_MODEL, EYES_MAX_FRAMES = "minicpm-v4.5:8b", "64"   # 11-02 test: qwen3-vl:8
 
 def eyes(local, question):
     env = dict(os.environ, GUARDIAN_EYES_MODEL=EYES_MODEL, GUARDIAN_EYES_MAX_FRAMES=EYES_MAX_FRAMES)
-    p = subprocess.run([sys.executable, "-c", EYES_RUN, local, "--no-index", "--ask", question], cwd=LITTLE_BRAIN, env=env,
+    # 11-02: no --ask - the 20B brain that writes that answer took 10-14 GB RAM and got every long watch reaped
+    p = subprocess.run([sys.executable, "-c", EYES_RUN, local, "--no-index"], cwd=LITTLE_BRAIN, env=env,
                        capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=NOWIN)
     keep = [ln for ln in (p.stdout + p.stderr).splitlines() if ln.strip() and not re.search(
         r"Warning|warn\(|Creating model|Model files already|Could not find files|Checkpoint path|Using CPU|\x1b", ln)]
