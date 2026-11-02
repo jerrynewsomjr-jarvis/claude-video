@@ -1,12 +1,12 @@
 """Jerry's token-saving ladder for /watch (fork jerrynewsomjr-jarvis/claude-video, added 2026-11-02 by Jarvis).
 
-FULL    full <url|file> - words + Guardian eyes (local) + Gemini if free -> REPORT.md  (Jerry: "watch and learn this")
+FULL    full <url|file> - words + Guardian eyes (local, ours) -> REPORT.md, no Gemini  (Jerry: "watch and learn this")
 Rung 1  transcript - OUR tools first. YouTube URL: the video's own captions through jerry-tools/local-lesson (no
                      download, ~2 s). Local file: faster-whisper small.en on this PC (offline, free).
 Rung 2  frames     - get the file with OUR grabber (Newsom Docs, localhost:8090), else yt-dlp, then upstream
                      watch.py --detail transcript --timestamps <only the moments that matter> --resolution 1024.
                      --sheet tiles the frames 3 to a row (~60 % fewer image tokens than one image per frame).
-Rung 3  deep watch - upstream watch.py --engine gemini (GEMINI_API_KEY in ~/.config/watch/.env).
+Rung 3  deep watch - OUR full watch (Guardian eyes). Gemini is OFF (Jerry 11-02 "make our own thing"); `deep` kept only if he asks.
                      "local deep watch" = upstream --engine local --detail token-burner: only on request.
 usage:
   python jerry_ladder.py transcript <url|file> [--out f.txt]
@@ -225,11 +225,7 @@ def full(src, question=None, out_dir=None):
     ey = eyes(local, question)
     open(os.path.join(out_dir, "eyes.txt"), "w", encoding="utf-8").write(ey)
     print("[full] Guardian eyes done (%.0f s)" % (time.time() - t1), file=sys.stderr)
-    try:
-        gem, model = deep(local, question, rounds=1, wait_s=0, out_dir=os.path.join(out_dir, "gemini"))
-        gem_note = "Gemini (%s)" % model
-    except Exception as exc:
-        gem, gem_note = "", "Gemini unavailable right now (%s)" % str(exc)[:160]
+    gem, gem_note = "", "Gemini OFF (Jerry 11-02: our own tools only)"
     rep = os.path.join(out_dir, "REPORT.md")
     with open(rep, "w", encoding="utf-8") as f:
         f.write("# Full watch: %s\n- source: %s\n- local file: %s\n- words: %s -> transcript.txt\n- %s\n\n"
