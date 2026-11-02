@@ -1,5 +1,6 @@
 """Jerry's token-saving ladder for /watch (fork jerrynewsomjr-jarvis/claude-video, added 2026-11-02 by Jarvis).
 
+FULL    full <url|file> - words + Guardian eyes (local) + Gemini if free -> REPORT.md  (Jerry: "watch and learn this")
 Rung 1  transcript - OUR tools first. YouTube URL: the video's own captions through jerry-tools/local-lesson (no
                      download, ~2 s). Local file: faster-whisper small.en on this PC (offline, free).
 Rung 2  frames     - get the file with OUR grabber (Newsom Docs, localhost:8090), else yt-dlp, then upstream
@@ -190,6 +191,56 @@ def deep(src, question, rounds=3, wait_s=60, out_dir=None):
     raise RuntimeError("deep watch unavailable (Google busy/quota): %s -> use rung 2 (frames + transcript)" % ", ".join(tried))
 
 
+# ------------------------------------------------------------------ FULL WATCH: everything free, one report
+# Jerry 11-02: "I want something built for you to be able to watch videos ... when I send you a video and I tell you
+# to watch and learn what this guy says ... it's really to help you." Words + Guardian's local eyes (frames that matter,
+# sounds, on-screen text, local vision model) + Gemini when Google has room -> one REPORT.md that Claude reads, then
+# Claude looks at frame sheets itself wherever something matters. Game running = fine (stutter is OK, Jerry 11-02).
+LITTLE_BRAIN = r"C:\Users\jerry\development\little-brain"
+DEFAULT_Q = ("Describe everything that happens with timestamps: what is shown on screen (code, settings, websites, "
+             "results, before/after), every step the speaker teaches, every tool and number they name.")
+EYES_RUN = ("import sys, runpy; sys.path[:0] = ['.', 'little_brain']; import gamelight; gamelight.active = lambda: False; "
+            "sys.argv = ['eyes.py'] + sys.argv[1:]; runpy.run_path('little_brain/eyes.py', run_name='__main__')")
+
+
+def eyes(local, question):
+    p = subprocess.run([sys.executable, "-c", EYES_RUN, local, "--no-index", "--ask", question], cwd=LITTLE_BRAIN,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=NOWIN)
+    keep = [ln for ln in (p.stdout + p.stderr).splitlines() if ln.strip() and not re.search(
+        r"Warning|warn\(|Creating model|Model files already|Could not find files|Checkpoint path|Using CPU|\x1b", ln)]
+    return "\n".join(keep[-400:])
+
+
+def full(src, question=None, out_dir=None):
+    question = question or DEFAULT_Q
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    out_dir = out_dir or os.path.join(os.path.expanduser("~"), "holding", "watch-full", stamp)
+    os.makedirs(out_dir, exist_ok=True)
+    local = fetch(src) if is_url(src) else src
+    t0 = time.time()
+    text, via = transcript(src)
+    open(os.path.join(out_dir, "transcript.txt"), "w", encoding="utf-8").write(text)
+    print("[full] words: %s (%d chars, %.0f s)" % (via, len(text), time.time() - t0), file=sys.stderr)
+    t1 = time.time()
+    ey = eyes(local, question)
+    open(os.path.join(out_dir, "eyes.txt"), "w", encoding="utf-8").write(ey)
+    print("[full] Guardian eyes done (%.0f s)" % (time.time() - t1), file=sys.stderr)
+    try:
+        gem, model = deep(local, question, rounds=1, wait_s=0, out_dir=os.path.join(out_dir, "gemini"))
+        gem_note = "Gemini (%s)" % model
+    except Exception as exc:
+        gem, gem_note = "", "Gemini unavailable right now (%s)" % str(exc)[:160]
+    rep = os.path.join(out_dir, "REPORT.md")
+    with open(rep, "w", encoding="utf-8") as f:
+        f.write("# Full watch: %s\n- source: %s\n- local file: %s\n- words: %s -> transcript.txt\n- %s\n\n"
+                % (stamp, src, local, via, gem_note))
+        if gem:
+            f.write("## Gemini watched it\n%s\n\n" % gem)
+        f.write("## Guardian's eyes (local: frames that matter, sounds, on-screen text)\n%s\n\n" % ey)
+        f.write("## Next\nLook yourself where it matters: jerry_ladder.py frames \"%s\" --timestamps <from above> --sheet\n" % local)
+    return rep
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -197,6 +248,7 @@ def main():
     b = sub.add_parser("fetch"); b.add_argument("url"); b.add_argument("--dir"); b.add_argument("--quality", default=720)
     c = sub.add_parser("frames"); c.add_argument("src"); c.add_argument("--timestamps", required=True)
     c.add_argument("--resolution", type=int, default=1024); c.add_argument("--out-dir"); c.add_argument("--sheet", action="store_true")
+    fu = sub.add_parser("full"); fu.add_argument("src"); fu.add_argument("--question"); fu.add_argument("--out-dir")
     d = sub.add_parser("deep"); d.add_argument("src"); d.add_argument("--question", required=True)
     d.add_argument("--rounds", type=int, default=3); d.add_argument("--wait", type=int, default=60); d.add_argument("--out-dir")
     args = ap.parse_args()
@@ -209,6 +261,8 @@ def main():
             sys.stdout.buffer.write(("# transcript via %s\n%s\n" % (via, text)).encode("utf-8"))
     elif args.cmd == "fetch":
         print(fetch(args.url, args.dir, args.quality))
+    elif args.cmd == "full":
+        print(full(args.src, args.question, args.out_dir))
     elif args.cmd == "deep":
         text, model = deep(args.src, args.question, args.rounds, args.wait, args.out_dir)
         sys.stdout.buffer.write(("# deep watch via %s\n%s" % (model, text)).encode("utf-8"))
