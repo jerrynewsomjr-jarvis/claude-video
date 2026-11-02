@@ -139,14 +139,16 @@ def frames(src, timestamps, resolution=1024, out_dir=None, sheet=False):
     if not sheet:
         return [(p, t) for p, t in paths]
     from PIL import Image, ImageDraw
-    per_row, w = 3, 640
+    first = Image.open(paths[0][0])
+    portrait = first.height > first.width                      # Shorts/TikTok: 5 across at 360 px, 2 rows
+    per_row, w, rows_per_sheet = (5, 360, 2) if portrait else (3, 640, 3)
     ims = []
     for p, t in paths:
         im = Image.open(p).convert("RGB")
         im = im.resize((w, round(im.height * w / im.width)))
         ImageDraw.Draw(im).text((8, 6), t, fill=(255, 255, 0))
         ims.append((im, t))
-    sheets, rows_per_sheet = [], 3
+    sheets = []
     for s in range(0, len(ims), per_row * rows_per_sheet):
         chunk = ims[s:s + per_row * rows_per_sheet]
         h = max(i.height for i, _ in chunk)
@@ -154,6 +156,9 @@ def frames(src, timestamps, resolution=1024, out_dir=None, sheet=False):
         canvas = Image.new("RGB", (per_row * w + (per_row - 1) * 6, rows * h + (rows - 1) * 6), "white")
         for k, (im, _) in enumerate(chunk):
             canvas.paste(im, ((k % per_row) * (w + 6), (k // per_row) * (h + 6)))
+        if max(canvas.size) > 1900:                              # image guard: never hand Claude > 2000 px
+            k = 1900 / max(canvas.size)
+            canvas = canvas.resize((round(canvas.width * k), round(canvas.height * k)))
         path = os.path.join(out_dir, "sheet_%02d.jpg" % (len(sheets) + 1))
         canvas.save(path, quality=88)
         sheets.append((path, ",".join(t for _, t in chunk)))
