@@ -10,5 +10,6 @@ if ($LASTEXITCODE -ne 0) { "CONFLICT: resolve it (keep upstream text, re-add our
 python -m pytest -q 2>&1 | Select-Object -Last 3
 git push origin main
 claude plugin marketplace update claude-video 2>&1 | Select-Object -Last 2
-claude plugin update watch@claude-video 2>&1 | Select-Object -Last 2
+claude plugin uninstall watch@claude-video 2>&1 | Select-Object -Last 1
+claude plugin install watch@claude-video 2>&1 | Select-Object -Last 1
 "Done: fork and installed plugin are on the latest upstream + our changes."

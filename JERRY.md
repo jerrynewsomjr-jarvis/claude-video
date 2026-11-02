@@ -21,3 +21,4 @@ updates the installed plugin. If git reports a conflict in SKILL.md: keep upstre
 
 ## Installed as
 `claude plugin marketplace add jerrynewsomjr-jarvis/claude-video` then `claude plugin install watch@claude-video`.
+After pushing a change of OUR files: `claude plugin marketplace update claude-video`, then `claude plugin uninstall watch@claude-video` and `claude plugin install watch@claude-video` (the version number is upstream's, so `plugin update` alone keeps the old copy).
