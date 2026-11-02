@@ -211,6 +211,53 @@ def eyes(local, question):
     return "\n".join(keep[-400:])
 
 
+# 11-02: a 12-min watch held too much RAM next to the game + Docker and got reaped. Long videos are cut into 3-min
+# pieces (stream copy, no re-encode) and watched one by one; each piece waits for >= 6 GB free RAM.
+PIECE_S, MIN_FREE_GB = 180, 6.0
+
+
+def _free_gb():
+    import psutil
+    return psutil.virtual_memory().available / 1e9
+
+
+def _dur(path):
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                       capture_output=True, text=True, creationflags=NOWIN)
+    return float(r.stdout.strip() or 0)
+
+
+def _shift(text, off):
+    def f(m):
+        a = int(m.group(1)) * 60 + int(m.group(2)) + off
+        b = int(m.group(3)) * 60 + int(m.group(4)) + off
+        return "[%d:%02d - %d:%02d]" % (a // 60, a % 60, b // 60, b % 60)
+    return re.sub(r"\[(\d+):(\d\d) - (\d+):(\d\d)\]", f, text)
+
+
+def eyes_chunked(local, question, out_dir):
+    total = _dur(local)
+    if total <= PIECE_S + 20:
+        return eyes(local, question)
+    pdir = os.path.join(out_dir, "pieces")
+    os.makedirs(pdir, exist_ok=True)
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", local, "-map", "0", "-c", "copy", "-f", "segment",
+                    "-segment_time", str(PIECE_S), "-reset_timestamps", "1", os.path.join(pdir, "piece_%02d.mp4")],
+                   check=True, creationflags=NOWIN)
+    pieces = sorted(glob.glob(os.path.join(pdir, "piece_*.mp4")))
+    parts, off = [], 0.0
+    for i, pc in enumerate(pieces):
+        waited = 0
+        while _free_gb() < MIN_FREE_GB and waited < 900:
+            time.sleep(15); waited += 15
+        print("[full] piece %d/%d at %d:%02d (%.1f GB free)" % (i + 1, len(pieces), int(off) // 60, int(off) % 60, _free_gb()), file=sys.stderr, flush=True)
+        txt = eyes(pc, question)
+        parts.append("### piece %d (starts %d:%02d)\n%s" % (i + 1, int(off) // 60, int(off) % 60, _shift(txt, int(off))))
+        open(os.path.join(out_dir, "eyes_partial.txt"), "w", encoding="utf-8").write("\n\n".join(parts))
+        off += _dur(pc)
+    return "\n\n".join(parts)
+
+
 def full(src, question=None, out_dir=None):
     question = question or DEFAULT_Q
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -222,7 +269,7 @@ def full(src, question=None, out_dir=None):
     open(os.path.join(out_dir, "transcript.txt"), "w", encoding="utf-8").write(text)
     print("[full] words: %s (%d chars, %.0f s)" % (via, len(text), time.time() - t0), file=sys.stderr)
     t1 = time.time()
-    ey = eyes(local, question)
+    ey = eyes_chunked(local, question, out_dir)
     open(os.path.join(out_dir, "eyes.txt"), "w", encoding="utf-8").write(ey)
     print("[full] Guardian eyes done (%.0f s)" % (time.time() - t1), file=sys.stderr)
     gem, gem_note = "", "Gemini OFF (Jerry 11-02: our own tools only)"
