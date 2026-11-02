@@ -203,8 +203,12 @@ EYES_RUN = ("import sys, runpy; sys.path[:0] = ['.', 'little_brain']; import gam
             "sys.argv = ['eyes.py'] + sys.argv[1:]; runpy.run_path('little_brain/eyes.py', run_name='__main__')")
 
 
+EYES_MODEL, EYES_MAX_FRAMES = "minicpm-v4.5:8b", "64"   # 11-02 test: qwen3-vl:8b 4.5x slower, 12.8 GB RAM, would not critique -> deleted; minicpm stays
+
+
 def eyes(local, question):
-    p = subprocess.run([sys.executable, "-c", EYES_RUN, local, "--no-index", "--ask", question], cwd=LITTLE_BRAIN,
+    env = dict(os.environ, GUARDIAN_EYES_MODEL=EYES_MODEL, GUARDIAN_EYES_MAX_FRAMES=EYES_MAX_FRAMES)
+    p = subprocess.run([sys.executable, "-c", EYES_RUN, local, "--no-index", "--ask", question], cwd=LITTLE_BRAIN, env=env,
                        capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=NOWIN)
     keep = [ln for ln in (p.stdout + p.stderr).splitlines() if ln.strip() and not re.search(
         r"Warning|warn\(|Creating model|Model files already|Could not find files|Checkpoint path|Using CPU|\x1b", ln)]
