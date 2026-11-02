@@ -131,8 +131,9 @@ def frames(src, timestamps, resolution=1024, out_dir=None, sheet=False):
     if is_url(src):
         src = fetch(src)
     out_dir = out_dir or os.path.join(os.path.dirname(os.path.abspath(src)), "watch-frames")
+    timestamps = ",".join(re.sub(r"\.\d+$", "", t.strip()) for t in timestamps.split(","))  # upstream takes whole seconds only
     cmd = [sys.executable, os.path.join(HERE, "watch.py"), src, "--detail", "transcript", "--timestamps", timestamps,
-           "--resolution", str(resolution), "--out-dir", out_dir, "--no-whisper"]
+           "--resolution", str(resolution), "--out-dir", out_dir, "--no-whisper", "--engine", "local"]  # never auto-Gemini (Jerry 11-02)
     r = subprocess.run(cmd, capture_output=True, text=True, creationflags=NOWIN)
     paths = re.findall(r"`([^`]+cue_\d+\.jpg)` \(t=([0-9:]+)", r.stdout)
     if not paths:
