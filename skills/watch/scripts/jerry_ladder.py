@@ -11,6 +11,7 @@ usage:
   python jerry_ladder.py transcript <url|file> [--out f.txt]
   python jerry_ladder.py fetch <url> [--dir D] [--quality 720]
   python jerry_ladder.py frames <url|file> --timestamps 0:05,3:20 [--resolution 1024] [--sheet] [--out-dir D]
+  python jerry_ladder.py deep <url|file> --question "..." [--rounds 3 --wait 60]   (Gemini, model fallback chain)
 """
 import argparse
 import glob
@@ -165,6 +166,30 @@ def frames(src, timestamps, resolution=1024, out_dir=None, sheet=False):
     return sheets
 
 
+# ------------------------------------------------------------------ rung 3: deep watch with model fallback
+# 11-02: on the free tier Google answers 503 "high demand" for one flash model while another may be free; pro models
+# have 0 free quota (429); older models refuse video (400). So: walk the chain, wait, walk it again.
+DEEP_CHAIN = ["gemini-3.7-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.6-flash", "gemini-3.5-flash"]
+
+
+def deep(src, question, rounds=3, wait_s=60, out_dir=None):
+    out_dir = out_dir or os.path.join(os.path.expanduser("~"), "holding", "watch-deep")
+    tried = []
+    for r in range(rounds):
+        for m in DEEP_CHAIN:
+            env = dict(os.environ, WATCH_GEMINI_MODEL=m)
+            p = subprocess.run([sys.executable, os.path.join(HERE, "watch.py"), src, "--engine", "gemini",
+                                "--question", question, "--out-dir", out_dir], capture_output=True, text=True,
+                               env=env, creationflags=NOWIN)
+            if "(failed)" not in p.stdout and p.returncode == 0:
+                return p.stdout, m
+            why = re.search(r"HTTP (\d{3})", p.stdout)
+            tried.append("%s:%s" % (m, why.group(1) if why else "?"))
+        if r < rounds - 1:
+            time.sleep(wait_s)
+    raise RuntimeError("deep watch unavailable (Google busy/quota): %s -> use rung 2 (frames + transcript)" % ", ".join(tried))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -172,6 +197,8 @@ def main():
     b = sub.add_parser("fetch"); b.add_argument("url"); b.add_argument("--dir"); b.add_argument("--quality", default=720)
     c = sub.add_parser("frames"); c.add_argument("src"); c.add_argument("--timestamps", required=True)
     c.add_argument("--resolution", type=int, default=1024); c.add_argument("--out-dir"); c.add_argument("--sheet", action="store_true")
+    d = sub.add_parser("deep"); d.add_argument("src"); d.add_argument("--question", required=True)
+    d.add_argument("--rounds", type=int, default=3); d.add_argument("--wait", type=int, default=60); d.add_argument("--out-dir")
     args = ap.parse_args()
     if args.cmd == "transcript":
         text, via = transcript(args.src)
@@ -182,6 +209,9 @@ def main():
             sys.stdout.buffer.write(("# transcript via %s\n%s\n" % (via, text)).encode("utf-8"))
     elif args.cmd == "fetch":
         print(fetch(args.url, args.dir, args.quality))
+    elif args.cmd == "deep":
+        text, model = deep(args.src, args.question, args.rounds, args.wait, args.out_dir)
+        sys.stdout.buffer.write(("# deep watch via %s\n%s" % (model, text)).encode("utf-8"))
     else:
         for p, t in frames(args.src, args.timestamps, args.resolution, args.out_dir, args.sheet):
             print("%s  (t=%s)" % (p, t))

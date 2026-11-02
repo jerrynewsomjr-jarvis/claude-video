@@ -12,8 +12,9 @@ small plan. Script: `${SKILL_DIR}/scripts/jerry_ladder.py` (same folder rules as
    - Downloads with Jerry's grabber (Newsom Docs, localhost:8090) first, then yt-dlp, then upstream's downloader.
    - 1024 px frames; `--sheet` tiles 3 per row at 640 px (use it unless small text must be read; drop it for code).
 3. **Deep watch** (only when Jerry says "deep watch" or the visuals ARE the question and rungs 1-2 fall short):
-   upstream `watch.py "<src>" --engine gemini --question "<what to find>"` (Google's video model; needs
-   GEMINI_API_KEY in `~/.config/watch/.env`). If no key: say so in one line and stay on rung 2.
+   `python "${SKILL_DIR}/scripts/jerry_ladder.py" deep "<src>" --question "<what to find>"` - walks the flash models
+   (free tier: 503 "high demand" spikes, pro = 0 free quota), retries 3x a minute apart, then says to use rung 2.
+   Key: GEMINI_API_KEY in `~/.config/watch/.env` (set 11-02).
    **Local deep watch** (only when Jerry says it): upstream `--engine local --detail token-burner` - frames to Claude.
 
 Never paste API keys into chat or files in the repo. Report what you watched (rung, timestamps) in one line.
